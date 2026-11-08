@@ -1,0 +1,159 @@
+"""Enforcement Prioritization — ranked deployment plan + downloadable briefing."""
+import sys
+from datetime import date
+from pathlib import Path
+
+import plotly.express as px
+import streamlit as st
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import lib  # noqa: E402
+from parksight import scoring  # noqa: E402
+from parksight.reports.briefing import build_briefing  # noqa: E402
+
+st.set_page_config(page_title="ParkSight — Prioritize", page_icon=lib.FAVICON, layout="wide")
+lib.inject_css()
+lib.common_sidebar()
+if not lib.artifacts_exist():
+    lib.no_data_warning()
+
+lib.page_header("🎯 Enforcement Prioritization",
+                "Turn impact scores into a ranked, reasoned deployment plan.")
+
+lib.policy_banner()
+
+if "pri_grain"   not in st.session_state: st.session_state["pri_grain"]   = "Police station"
+if "pri_window"  not in st.session_state: st.session_state["pri_window"]  = "evening"
+if "pri_sort_by" not in st.session_state: st.session_state["pri_sort_by"] = "Blind-Spot (de-biased)"
+if "pri_top_n"   not in st.session_state: st.session_state["pri_top_n"]   = 10
+
+c1, c2, c3 = st.columns([1, 1, 1.4])
+grain = c1.radio("Level", ["Police station", "Junction"], horizontal=False, key="pri_grain")
+window = c2.radio("Target window", ["evening", "morning"], horizontal=False,
+                  format_func=lambda w: "Evening (17–21 IST)" if w == "evening" else "Morning (08–11 IST)",
+                  key="pri_window")
+sort_by = c1.radio("Rank by", ["Blind-Spot (de-biased)", "PCIS (impact)", "Enforcement-Gap"],
+                   horizontal=False, key="pri_sort_by",
+                   help="Blind-Spot = de-biased deploy-here index. It inverse-propensity-"
+                        "weights tickets by hourly enforcement exposure and compares them to "
+                        "an external congestion prior, so it surfaces high-congestion places "
+                        "the raw ticket data under-reports. PCIS = raw impact. "
+                        "Enforcement-Gap = PCIS minus evening presence (a simpler proxy).")
+fname = "station_pcis.parquet" if grain == "Police station" else "junction_pcis.parquet"
+namecol = "police_station" if grain == "Police station" else "junction_name"
+sort_col = ("blindspot_risk" if sort_by.startswith("Blind") else
+            "PCIS" if sort_by.startswith("PCIS") else "gap_score")
+df = lib.scored(fname).sort_values(sort_col, ascending=False).copy()
+df["rank"] = range(1, len(df) + 1)
+df["units"] = scoring.recommended_units(df["PCIS"]).to_numpy()
+
+
+@st.cache_data(show_spinner=False)
+def _cached_briefing(window, top_n, grain, sort_by, day, wkey):
+    """Cache the PDF per (controls, weights, day) so dragging the slider re-uses
+    prior builds instead of re-reading 298k rows + re-rendering ReportLab on every
+    rerun. `wkey` is a hashable tuple of the applied weights (None = ETL defaults)."""
+    weights = dict(wkey) if wkey else None
+    return build_briefing(window=window, top_n=top_n, for_date=day,
+                          grain=grain, sort_by=sort_by, weights=weights)
+
+
+@st.fragment
+def briefing_panel():
+    """Self-contained so the slider re-runs ONLY this panel, not the whole
+    298k-row page — otherwise the per-rerun PDF build freezes the slider."""
+    st.markdown("**📄 Daily Deployment Briefing**")
+    st.caption("One-page PDF a station officer can act on this shift — "
+               "reflects the Level, Rank-by and Window selected on the left.")
+    top_n = st.slider("Zones in briefing", 5, 25, step=5, key="pri_top_n")
+    g = st.session_state["pri_grain"]
+    w = st.session_state["pri_window"]
+    s = st.session_state["pri_sort_by"]
+    wkey = tuple(sorted(lib.active_weights().items())) if lib.custom_weights_active() else None
+    pdf = _cached_briefing(w, top_n, g, s, date.today(), wkey)
+    _slug = ("blindspot" if s.startswith("Blind") else
+             "pcis" if s.startswith("PCIS") else "gap")
+    _glug = "station" if g == "Police station" else "junction"
+    st.download_button("⬇️ Download briefing PDF", data=pdf,
+                       file_name=f"parksight_briefing_{_glug}_{_slug}_{w}_top{top_n}.pdf",
+                       mime="application/pdf", use_container_width=True)
+
+
+with c3:
+    briefing_panel()
+
+st.divider()
+m = lib.meta()
+with st.expander("🧠  How we beat the enforcement feedback loop (de-biasing engine)",
+                 expanded=sort_by.startswith("Blind")):
+    g1, g2 = st.columns([1, 1])
+    with g1:
+        st.markdown(
+            "**The trap.** A ticket only exists where an officer was present. "
+            f"Enforcement collapses in the evening — distinct active devices drop to "
+            f"**~{m.get('debias_evening_exposure_pct', 2.2)}% of the daytime peak** "
+            f"(peak enforcement is at **{m.get('debias_peak_exposure_hour', 11)}:00**, not rush hour). "
+            "A model trained naively on tickets would 'learn' that 7 PM commercial "
+            "corridors are *safe* — reinforcing the blind spot.\n\n"
+            "**The fix (two ticket-independent corrections):**\n"
+            "1. **Inverse-propensity weighting** — re-inflate observed tickets by "
+            "1/exposure(hour) (Horvitz–Thompson), correcting up to "
+            f"**{m.get('debias_max_ipw_uplift', 2.8)}×** in dark hours.\n"
+            "2. **External congestion prior** = OSM-style road-hierarchy(place) × a "
+            "synthetic rush-hour curve. Neither depends on ticket timing, so the "
+            "missing-label loop can't train them to zero.\n\n"
+            "The **Blind-Spot** score = latent demand × the divergence between "
+            "predicted congestion and the (biased) observed evening signal — it "
+            "*forces* deployments toward where data is missing but probability is maxed.")
+    with g2:
+        st.plotly_chart(lib.exposure_divergence_fig(), use_container_width=True)
+
+tiers = {"High": "#EF4444", "Medium": "#F97316", "Low": "#22D3EE"}
+counts = df["tier"].value_counts()
+kc = st.columns(3)
+for i, t in enumerate(["High", "Medium", "Low"]):
+    with kc[i]:
+        lib.kpi(f"{t} priority", f"{int(counts.get(t, 0))}", f"{grain.lower()}s", tiers[t])
+
+st.write("")
+a, b = st.columns([1.5, 1])
+with a:
+    show = df.head(15)[["rank", namecol, "blindspot_risk", "PCIS", "ipw_uplift",
+                        "violations", "tier", "units", "reason"]].copy()
+    show.columns = ["#", grain, "Blind-Spot", "PCIS", "IPW×", "Violations", "Tier", "Units", "Why this rank"]
+    st.dataframe(show, hide_index=True, use_container_width=True,
+                 column_config={
+                     "Blind-Spot": st.column_config.ProgressColumn("Blind-Spot", min_value=0, max_value=100, format="%.0f"),
+                     "PCIS": st.column_config.ProgressColumn("PCIS", min_value=0, max_value=100, format="%.0f"),
+                     "IPW×": st.column_config.NumberColumn(
+                         "IPW×", help="Inverse-propensity uplift: how much the raw count is "
+                         "scaled up to correct for under-enforcement.", format="%.2f×")})
+    lib.df_download(df[[namecol, "blindspot_risk", "PCIS", "gap_score", "divergence",
+                        "ipw_uplift", "violations", "tier", "units", "reason"]],
+                    "⬇️ Export full ranking (CSV)", f"parksight_priority_{namecol}.csv")
+with b:
+    top = df.head(12)
+    fig = px.bar(top, x="PCIS", y=top[namecol], orientation="h", color="tier",
+                 color_discrete_map=tiers, labels={namecol: ""})
+    fig.update_layout(yaxis=dict(autorange="reversed"))
+    st.plotly_chart(lib.style_fig(fig, height=460), use_container_width=True)
+
+st.caption("Units scale with PCIS (≈ PCIS/100 × 3, min 1). Recommendations are decision-support.")
+
+st.divider()
+with st.expander("📈  Emerging hotspots — fastest-worsening zones (get ahead of them)", expanded=True):
+    em = df[df["trend_slope"] > 0].sort_values("trend_slope", ascending=False).head(10).copy()
+    em["growth_per_month"] = em["trend_slope"].round(0).astype(int)
+    e1, e2 = st.columns([1.3, 1])
+    with e1:
+        et = em[[namecol, "growth_per_month", "PCIS", "violations", "tier"]].copy()
+        et.columns = [grain, "▲ Violations/month", "PCIS", "Violations", "Tier"]
+        st.dataframe(et, hide_index=True, use_container_width=True)
+    with e2:
+        fig = px.bar(em.head(8), x="growth_per_month", y=em.head(8)[namecol],
+                     orientation="h", color="growth_per_month", color_continuous_scale="Reds",
+                     labels={namecol: "", "growth_per_month": "▲/month"})
+        fig.update_layout(yaxis=dict(autorange="reversed"), coloraxis_showscale=False)
+        st.plotly_chart(lib.style_fig(fig, height=300), use_container_width=True)
+    st.caption("Trend = month-over-month slope of violation counts. Rising zones are flagged "
+               "before they become entrenched — proactive, not reactive, enforcement.")
