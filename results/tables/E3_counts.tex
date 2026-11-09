@@ -1,0 +1,13 @@
+\begin{tabular}{lrrrrrrrr}
+\toprule
+model & macro_mase & mase_lo & mase_hi & pooled_mase & rmse & poisson_deviance & n_seeds & flagged_stations \\
+\midrule
+lasso & 0.703 & 0.649 & 0.769 & 0.715 & 30.815 & 16.715 & 1 & 0 \\
+ridge & 0.705 & 0.650 & 0.771 & 0.715 & 30.675 & 16.692 & 1 & 0 \\
+random_forest & 0.736 & 0.689 & 0.789 & 0.746 & 29.664 & 14.629 & 3 & 0 \\
+lightgbm & 0.740 & 0.693 & 0.794 & 0.758 & 30.796 & 15.042 & 3 & 0 \\
+poisson_glm & 0.750 & 0.703 & 0.804 & 0.753 & 29.697 & 14.712 & 1 & 0 \\
+ma7 & 0.756 & 0.700 & 0.817 & 0.775 & 31.939 & 16.423 & 1 & 0 \\
+seasonal_naive & 0.975 & 0.902 & 1.062 & 1.000 & 41.113 & 42.181 & 1 & 0 \\
+\bottomrule
+\end{tabular}

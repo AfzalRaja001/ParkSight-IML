@@ -1,0 +1,13 @@
+model,versus,wilcoxon_p
+seasonal_naive,random_forest,3.0078317493636417e-10
+ma7,seasonal_naive,1.9243957584004852e-10
+ma7,random_forest,0.06991655589691712
+poisson_glm,seasonal_naive,8.527694966187635e-10
+poisson_glm,random_forest,0.015728033452743335
+ridge,seasonal_naive,1.6256984569330967e-10
+ridge,random_forest,0.0024045447575229526
+lasso,seasonal_naive,1.6256984569330967e-10
+lasso,random_forest,0.002850274149757876
+random_forest,seasonal_naive,3.0078317493636417e-10
+lightgbm,seasonal_naive,4.943662874802498e-10
+lightgbm,random_forest,0.6888802341135647
