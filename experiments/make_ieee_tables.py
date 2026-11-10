@@ -23,7 +23,7 @@ def main():
     h = pd.read_csv(T / "E4_hotspots.csv")
     a, e = h[h.subset == "all"].set_index("model"), h[h.subset == "emerging"].set_index("model")
     order = ["persistence", "persistence_impact", "logreg", "svm", "random_forest", "lightgbm"]
-    save("hot", "Model & PR-AUC (all) & PR-AUC (emerging) & F1 (emerging)",
+    save("hot", "Model & PR-AUC all & PR-AUC emerg. & F1 emerg.",
          [(esc(m), f"{a.pr_auc[m]:.3f}", f"{e.pr_auc[m]:.3f}", f"{e.f1[m]:.2f}") for m in order], "lccc")
 
     b = pd.read_csv(T / "E2_benchmark.csv")

@@ -95,7 +95,7 @@ Table~\ref{tab:bench} and Figure~\ref{fig:bench} show recovery of the pseudo-tru
 \centering
 \caption{Recovery at severity 1.0: relative bias of the total (\%) / MAE per station-hour cell / Kendall \(\tau\) of the station ranking, mean of 20 seeds.}
 \label{tab:bench}
-\footnotesize
+\footnotesize\setlength{\tabcolsep}{2.5pt}
 \tab{bench}
 \end{table}
 
@@ -113,7 +113,7 @@ Table~\ref{tab:counts} compares the T1 models. Every model beats the seasonal-na
 \centering
 \caption{T1, next-day counts, four time-blocked folds. Macro MASE (lower is better, 1.0 = seasonal naive) with a 95\% bootstrap interval over stations; RMSE and mean Poisson deviance (Dev.).}
 \label{tab:counts}
-\footnotesize
+\footnotesize\setlength{\tabcolsep}{2.5pt}
 \tab{counts}
 \end{table}
 
@@ -124,7 +124,7 @@ Hotspots persist, so the question is what a model adds (Table~\ref{tab:hot}, Fig
 \centering
 \caption{T2, next-week hotspots (top 10\% by weekly impact). ``Emerging'' keeps hexagons that were not hotspots in the origin week; its F1 for the baselines is 0 by construction.}
 \label{tab:hot}
-\footnotesize
+\footnotesize\setlength{\tabcolsep}{2.5pt}
 \tab{hot}
 \end{table}
 
@@ -155,7 +155,7 @@ Table~\ref{tab:conf} reports 80\% split-conformal intervals around the lasso for
 \centering
 \caption{80\% conformal intervals for next-day counts: coverage (\%) / mean width (tickets) by station-volume tier; target coverage 80\%.}
 \label{tab:conf}
-\footnotesize
+\footnotesize\setlength{\tabcolsep}{2.5pt}
 \tab{conf}
 \end{table}
 
