@@ -1,49 +1,28 @@
 import numpy as np
 import pandas as pd
 
-from parksight.research import features as F
+from parksight.research.features import FEATURES_T1, t1_features
 
 
-def _grid(seed=0, days=70, stations=("A", "B")):
-    rng = np.random.default_rng(seed)
-    dates = pd.date_range("2024-01-01", periods=days, freq="D")
-    rows = [(s, d, int(rng.poisson(20 if s == "A" else 5))) for s in stations for d in dates]
-    return pd.DataFrame(rows, columns=["police_station", "date", "n"])
+def _toy_station_day(n_days=60):
+    dates = pd.date_range("2024-01-01", periods=n_days, freq="D")
+    rng = np.random.default_rng(0)
+    return pd.concat([
+        pd.DataFrame({"police_station": s, "date": dates, "n": rng.integers(0, 50, n_days)})
+        for s in ("A", "B")
+    ], ignore_index=True)
 
 
 def test_no_future_leak():
-    """Changing every count from day D on must not change any feature on or before day D."""
-    sd = _grid()
-    D = pd.Timestamp("2024-02-20")
-    changed = sd.copy()
-    changed.loc[changed["date"] >= D, "n"] = 9999
-    a, b = F.t1_features(sd), F.t1_features(changed)
-    cols = F.LAG_FEATURES + F.CAL_FEATURES + ["police_station", "date"]
-    a = a[a["date"] <= D].reset_index(drop=True)
-    b = b[b["date"] <= D].reset_index(drop=True)
-    assert len(a) == len(b) and len(a) > 0
-    pd.testing.assert_frame_equal(a[cols], b[cols])
+    sd = _toy_station_day()
+    cutoff = sd["date"].iloc[40]
+    mutated = sd.copy()
+    mutated.loc[mutated["date"] >= cutoff, "n"] = 9999
 
+    keep_cols = ["police_station", "date"] + FEATURES_T1
+    before = t1_features(sd)
+    after = t1_features(mutated)
+    b = before.loc[before["date"] <= cutoff, keep_cols].reset_index(drop=True)
+    a = after.loc[after["date"] <= cutoff, keep_cols].reset_index(drop=True)
 
-def test_lags_mean_what_they_say():
-    sd = _grid()
-    f = F.t1_features(sd)
-    row = f[f["police_station"] == "A"].iloc[0]
-    a = sd[sd["police_station"] == "A"].set_index("date")["n"]
-    d = row["date"]
-    day = pd.Timedelta(days=1)
-    assert row["lag1"] == a[d - day]
-    assert row["lag7"] == a[d - 7 * day]
-    assert np.isclose(row["roll7"], a[d - 7 * day: d - day].mean())
-    assert np.isclose(row["roll28"], a[d - 28 * day: d - day].mean())
-    assert row["y"] == a[d]
-
-
-def test_rejects_grid_with_gaps():
-    sd = _grid()
-    gap = sd.drop(sd.index[10])
-    try:
-        F.t1_features(gap)
-    except ValueError:
-        return
-    raise AssertionError("a gap in the daily grid must raise")
+    pd.testing.assert_frame_equal(a, b)

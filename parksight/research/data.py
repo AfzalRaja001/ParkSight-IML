@@ -1,72 +1,107 @@
-"""Datasets and time-blocked folds.
+"""Station-day and hexagon-week grids, and the pinned time-blocked folds.
 
-FIRST DRAFT written by Afzal so that E3 (count forecasting) could run end to end. Signatures
-follow IMPLEMENTATION_PLAN_V2.md section 5. Shaurya owns this file: review, extend (hex-week
-dataset for E4) and replace as needed.
+Reads the committed violations_clean.parquet; no raw CSV needed.
 """
 from dataclasses import dataclass
 
 import pandas as pd
 
-from parksight.research import paths
+from parksight import config as C
 
-# pinned in IMPLEMENTATION_PLAN_V2.md section 3
-T1_TEST_STARTS = ("2024-02-13", "2024-02-27", "2024-03-12", "2024-03-26")
+TOP_DECILE = 0.10
+T1_TEST_STARTS = ["2024-02-13", "2024-02-27", "2024-03-12", "2024-03-26"]
 T1_TEST_DAYS = 14
+T2_TEST_STARTS = [13, 15, 17, 19]  # 1-indexed week numbers, out of the 21 full weeks
+T2_TEST_WEEKS = 2
 
 
 @dataclass(frozen=True)
 class Fold:
     idx: int
-    train_end: pd.Timestamp     # exclusive
-    test_start: pd.Timestamp    # inclusive
-    test_end: pd.Timestamp      # inclusive
+    train_end: object    # exclusive: a date (T1) or a week number (T2)
+    test_start: object   # inclusive
+    test_end: object     # inclusive
 
 
-def _clean_tickets(columns):
-    return pd.read_parquet(paths.PROCESSED / "violations_clean.parquet", columns=columns)
+def _read(columns):
+    return pd.read_parquet(C.PROCESSED / "violations_clean.parquet", columns=columns)
 
 
 def load_station_day() -> pd.DataFrame:
-    """[police_station, date, n] on the full station x day grid (zeros filled).
+    """[police_station, date, n]; every station x every day in the data's span, zeros filled."""
+    df = _read(["police_station", "created_ist"])
+    df["date"] = df["created_ist"].dt.normalize()
+    counts = df.groupby(["police_station", "date"]).size().rename("n").reset_index()
+    stations = sorted(counts["police_station"].unique())
+    days = pd.date_range(counts["date"].min(), counts["date"].max(), freq="D")
+    grid = pd.MultiIndex.from_product([stations, days], names=["police_station", "date"]).to_frame(index=False)
+    out = grid.merge(counts, on=["police_station", "date"], how="left")
+    out["n"] = out["n"].fillna(0).astype("int64")
+    return out
 
-    A zero means "no ticket was recorded", which can mean no violation or no officer."""
-    v = _clean_tickets(["police_station", "created_ist"])
-    v["date"] = v["created_ist"].dt.normalize()
-    counts = v.groupby(["police_station", "date"]).size().rename("n")
-    days = pd.date_range(v["date"].min(), v["date"].max(), freq="D")
-    grid = pd.MultiIndex.from_product([sorted(v["police_station"].unique()), days],
-                                      names=["police_station", "date"])
-    return counts.reindex(grid, fill_value=0).reset_index()
+
+def _full_weeks(ts: pd.Series) -> list:
+    """Monday-start weeks whose 7 days all lie inside the data's date span."""
+    start, end = ts.min().normalize(), ts.max().normalize()
+    weeks = sorted(ts.dt.to_period("W").unique())
+    return [w for w in weeks if w.start_time.normalize() >= start and w.end_time.normalize() <= end]
 
 
-def day_folds() -> list[Fold]:
-    """4 expanding-window folds, 14-day test blocks, last block ends on the last date."""
-    folds = []
-    for i, s in enumerate(T1_TEST_STARTS):
-        start = pd.Timestamp(s)
-        folds.append(Fold(i, start, start, start + pd.Timedelta(days=T1_TEST_DAYS - 1)))
-    return folds
+def week_numbers(ts: pd.Series) -> pd.Series:
+    """Maps each timestamp's Monday-start week to a 1..21 week number.
+
+    Timestamps outside the 21 full weeks (the partial first/last week) map to NaN.
+    """
+    full = _full_weeks(ts)
+    num = {w: i + 1 for i, w in enumerate(full)}
+    return ts.dt.to_period("W").map(num)
 
 
 def load_hex_week() -> pd.DataFrame:
-    raise NotImplementedError("hex x week hotspot dataset (E4) is not written yet")
+    """[h3_r8, week, n, impact, y]; every hexagon x each of the 21 full weeks, zeros filled.
 
+    y = 1 if that hexagon is in the top 10% of ITS OWN week's hexagons by impact
+    (impact = sum(severity * peak_w)), else 0.
+    """
+    df = _read(["h3_r8", "created_ist", "severity", "peak_w"])
+    df["week"] = week_numbers(df["created_ist"])
+    df = df.dropna(subset=["week"]).copy()
+    df["week"] = df["week"].astype("int64")
+    df["impact_term"] = df["severity"] * df["peak_w"]
 
-def week_folds() -> list[Fold]:
-    raise NotImplementedError("week folds (E4) are not written yet")
+    agg = (df.groupby(["h3_r8", "week"])
+          .agg(n=("severity", "size"), impact=("impact_term", "sum"))
+          .reset_index())
+    hexes = sorted(df["h3_r8"].unique())
+    weeks = sorted(df["week"].unique())
+    grid = pd.MultiIndex.from_product([hexes, weeks], names=["h3_r8", "week"]).to_frame(index=False)
+    out = grid.merge(agg, on=["h3_r8", "week"], how="left")
+    out["n"] = out["n"].fillna(0).astype("int64")
+    out["impact"] = out["impact"].fillna(0.0)
 
+    def label(g):
+        k = max(1, round(TOP_DECILE * len(g)))
+        cutoff = g["impact"].nlargest(k).min()
+        return (g["impact"] >= cutoff).astype(int)
 
-def build_device_file() -> pd.DataFrame:
-    """Write research_data/tickets_device.parquet: [id, police_station, date, hour, weekday, device_id].
-
-    Joins the raw CSV's device_id onto the cleaned tickets by id, so the 298,445 rows are exactly
-    the ones the hackathon pipeline kept. For E1 and E2 only; never commit this file."""
-    paths.ensure_dirs()
-    raw = pd.read_csv(paths.RAW_CSV, usecols=["id", "device_id"], low_memory=False)
-    v = _clean_tickets(["id", "police_station", "created_ist", "hour", "weekday"])
-    out = v.merge(raw, on="id", how="left", validate="one_to_one")
-    out["date"] = out["created_ist"].dt.normalize()
-    out = out[["id", "police_station", "date", "hour", "weekday", "device_id"]]
-    out.to_parquet(paths.DEVICE_FILE, index=False)
+    out["y"] = out.groupby("week", group_keys=False).apply(label)
     return out
+
+
+def day_folds() -> list:
+    """4 expanding-window folds, 14-day test blocks; train uses everything before test_start."""
+    folds = []
+    for i, start in enumerate(T1_TEST_STARTS):
+        start = pd.Timestamp(start)
+        end = start + pd.Timedelta(days=T1_TEST_DAYS - 1)
+        folds.append(Fold(idx=i, train_end=start, test_start=start, test_end=end))
+    return folds
+
+
+def week_folds() -> list:
+    """4 expanding-window folds, 2-week test blocks; train uses everything before test_start."""
+    folds = []
+    for i, start in enumerate(T2_TEST_STARTS):
+        end = start + T2_TEST_WEEKS - 1
+        folds.append(Fold(idx=i, train_end=start, test_start=start, test_end=end))
+    return folds

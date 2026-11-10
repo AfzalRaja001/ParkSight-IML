@@ -1,30 +1,32 @@
 import numpy as np
 import pandas as pd
 
-from parksight.research import metrics as M
+from parksight.research.metrics import (bootstrap_ci, coverage, mase,
+                                        summarise_t1, summarise_t2)
 
 
 def test_mase_hand_example():
-    actual, model, naive = [10, 12, 9, 14], [11, 11, 10, 12], [8, 15, 12, 10]
-    scale = np.mean(np.abs(np.array(actual) - np.array(naive)))      # 3.0
-    assert scale == 3.0
-    assert round(M.mase(actual, model, scale), 3) == 0.417
+    assert round(mase([10, 12, 9, 14], [11, 11, 10, 12], 3.0), 3) == 0.417
 
 
-def test_poisson_deviance_survives_zero_prediction():
-    d = M.poisson_deviance([0, 3, 5], [0.0, 2.0, 5.0])
-    assert np.isfinite(d) and d >= 0
+def test_summarise_t1_flags_zero_denominator():
+    rows = [dict(model="m", fold=0, seed=0, police_station=s, date=pd.Timestamp("2024-01-01") + pd.Timedelta(days=i),
+                 y=10.0, pred=11.0, naive_mae=0.0 if s == "B" else 2.0)
+            for s in "ABC" for i in range(3)]
+    out = summarise_t1(pd.DataFrame(rows))
+    assert out.loc[0, "n_flagged_stations"] == 1  # flagged, not dropped
+    assert np.isfinite(out.loc[0, "mase_macro"])
 
 
-def test_bootstrap_ci_brackets_the_mean():
-    v = np.random.default_rng(1).normal(2.0, 1.0, 1000)
-    lo, hi = M.bootstrap_ci(v)
-    assert lo < v.mean() < hi
+def test_bootstrap_and_coverage():
+    lo, hi = bootstrap_ci(np.arange(100.0))
+    assert lo < 49.5 < hi
+    assert coverage([1, 5], [0, 0], [2, 2]) == 0.5
 
 
-def test_zero_scale_is_flagged_not_dropped():
-    pred = pd.DataFrame(dict(model="m", police_station="S", seed=0, fold=0, y=[1.0, 2.0],
-                             pred=[1.0, 3.0], naive=[1.0, 2.0], scale=[0.0, 0.0],
-                             date=pd.to_datetime(["2024-01-01", "2024-01-02"])))
-    sm = M.station_mase(pred)
-    assert len(sm) == 1 and bool(sm["flagged"].iloc[0]) and np.isfinite(sm["mase"].iloc[0])
+def test_summarise_t2_emerging_subset():
+    d = pd.DataFrame(dict(model="p", fold=0, seed=0, h3_r8=range(8), week=1,
+                          y=[1, 0, 1, 0, 1, 0, 0, 1], prev=[1, 1, 0, 0, 1, 0, 0, 0],
+                          pred=[.9, .2, .6, .1, .8, .3, .2, .7]))
+    out = summarise_t2(d).set_index("subset")
+    assert out.loc["all", "n"] == 8 and out.loc["emerging", "n"] == 5

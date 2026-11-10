@@ -1,0 +1,7 @@
+% Owner: see docs/iml-planning/TEAM_WORK_SPLIT_V2.md section 8
+\section{Methods}
+\subsection{Metrics}
+Headline MASE is computed per station with that station's own training-window seasonal-naive MAE as denominator, then macro-averaged; pooled MASE (test-window denominator) is reported beside it and the two are not comparable. Intervals are 95\% bootstrap intervals over stations (seed 12345). Poisson deviance clips predictions at $10^{-6}$. Stations with a near-zero denominator are floored and flagged.
+\subsection{Conformal intervals}
+Split-conformal with quantile level $\lceil (n+1)(1-\alpha)\rceil/n$, $\alpha=0.20$, calibrated on the last 21 days of each training window; global versus per-tier (terciles of training ticket totals).
+\input{../results/tables/E5_conformal}

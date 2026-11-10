@@ -1,60 +1,84 @@
-"""Leak-free features for T1 (next-day ticket count per police station).
+"""Leak-free feature builders for T1 (station-day counts) and T2 (hex-week hotspots).
 
-FIRST DRAFT written by Afzal so that E3 could run. Shaurya owns this file.
-
-Convention: one row per (station, date d). The target `y` is the ticket count ON day d. Every
-history feature uses only days strictly before d (shift(1) first), so a row can never see its own
-day or the future. Calendar features (weekday, holiday) are known in advance, so they are allowed.
-This is a one-step-ahead forecast: inside a test block each day is predicted from the actual
-counts up to the previous day.
+Every feature uses only data from strictly before the row's own date/week (via shift);
+the target column (y for T1, y_next for T2) is the only forward-looking (shift(-1)) value.
 """
+import h3
 import numpy as np
 import pandas as pd
 
-LAG_FEATURES = ["lag1", "lag7", "lag14", "roll7", "roll28", "samedow_mean"]
-CAL_FEATURES = ["dow", "is_weekend", "is_holiday"]
-STATION = "police_station"
-FEATURES_T1 = LAG_FEATURES + CAL_FEATURES + [STATION]
-WARMUP_DAYS = 28   # rows without a full 28-day history are dropped, not imputed
+from parksight import config as C
+from parksight.models.train_forecast import indian_holidays
+from parksight.research.data import week_numbers
 
-
-def _holiday_dates(years):
-    try:
-        import holidays
-        return set(pd.Timestamp(d) for d in holidays.country_holidays("IN", years=years).keys())
-    except Exception:       # library missing: no holiday signal rather than a crash
-        return set()
+FEATURES_T1 = ["lag1", "lag7", "lag14", "roll7", "roll28", "samedow_mean",
+              "weekday", "is_weekend", "is_holiday", "station_code"]
+FEATURES_T2 = ["impact_lag1", "impact_lag2", "impact_lag3", "impact_lag4", "impact_roll4",
+              "evening_share", "mean_severity", "junction_share", "neighbor_impact"]
 
 
 def t1_features(sd: pd.DataFrame) -> pd.DataFrame:
-    """sd = [police_station, date, n] on a complete daily grid. Returns sd plus features and `y`."""
-    df = sd.sort_values([STATION, "date"]).reset_index(drop=True).copy()
-    gaps = df.groupby(STATION)["date"].diff().dropna()
-    if not (gaps == pd.Timedelta(days=1)).all():
-        raise ValueError("t1_features needs a complete daily grid per station (shift = days)")
-
-    g = df.groupby(STATION, sort=False)["n"]
+    df = sd.sort_values(["police_station", "date"]).reset_index(drop=True).copy()
+    g = df.groupby("police_station")["n"]
     df["lag1"] = g.shift(1)
     df["lag7"] = g.shift(7)
     df["lag14"] = g.shift(14)
-    df["roll7"] = g.transform(lambda s: s.shift(1).rolling(7, min_periods=7).mean())
-    df["roll28"] = g.transform(lambda s: s.shift(1).rolling(WARMUP_DAYS, min_periods=WARMUP_DAYS).mean())
+    df["roll7"] = g.transform(lambda s: s.shift(1).rolling(7).mean())
+    df["roll28"] = g.transform(lambda s: s.shift(1).rolling(28).mean())
+    df["weekday"] = df["date"].dt.weekday
+    df["is_weekend"] = (df["weekday"] >= 5).astype(int)
+    years = sorted({df["date"].min().year, df["date"].max().year})
+    hol = indian_holidays(years)
+    df["is_holiday"] = df["date"].dt.date.isin(hol).astype(int)
+    df["samedow_mean"] = (df.groupby(["police_station", "weekday"])["n"]
+                          .transform(lambda s: s.shift(1).expanding().mean()))
+    df["station_code"] = df["police_station"].astype("category").cat.codes
+    df["y"] = g.shift(-1)
+    return df.dropna(subset=FEATURES_T1 + ["y"]).reset_index(drop=True)
 
-    df["dow"] = df["date"].dt.weekday
-    df["samedow_mean"] = (df.groupby([STATION, "dow"], sort=False)["n"]
-                            .transform(lambda s: s.shift(1).expanding().mean()))
-    df["is_weekend"] = (df["dow"] >= 5).astype(int)
-    hol = _holiday_dates(sorted(df["date"].dt.year.unique()))
-    df["is_holiday"] = df["date"].isin(hol).astype(int)
 
-    df["y"] = df["n"].astype(float)
-    return df.dropna(subset=LAG_FEATURES).reset_index(drop=True)
+def _neighbor_lag1_impact(hw: pd.DataFrame) -> pd.Series:
+    """Mean impact of a hexagon's 6 ring-1 neighbours, in the row's own week
+
+    (i.e. the same 1-week-before-the-target offset as impact_lag1 for the hexagon itself).
+    """
+    pivot = hw.pivot(index="h3_r8", columns="week", values="impact")
+    neighbours = {cell: [n for n in h3.grid_disk(cell, 1) if n != cell and n in pivot.index]
+                 for cell in pivot.index}
+    out = np.full(len(hw), np.nan)
+    for i, (cell, week) in enumerate(zip(hw["h3_r8"], hw["week"])):
+        ns = neighbours[cell]
+        if ns and week in pivot.columns:
+            out[i] = pivot.loc[ns, week].mean()
+    return pd.Series(out, index=hw.index)
 
 
-def log_counts(X: pd.DataFrame) -> pd.DataFrame:
-    """log1p of the count-type features (used by the linear models, which have a log scale)."""
-    X = X.copy()
-    for c in LAG_FEATURES:
-        if c in X.columns:
-            X[c] = np.log1p(X[c])
-    return X
+def _raw_hex_week_rates(hw: pd.DataFrame) -> pd.DataFrame:
+    """evening_share, mean_severity, junction_share per (h3_r8, week); 0 where n == 0."""
+    df = pd.read_parquet(C.PROCESSED / "violations_clean.parquet",
+                         columns=["h3_r8", "created_ist", "hour", "severity", "at_junction"])
+    df["week"] = week_numbers(df["created_ist"])
+    df = df.dropna(subset=["week"]).copy()
+    df["week"] = df["week"].astype("int64")
+    lo, hi, _ = C.PEAK_WINDOWS["evening"]
+    df["is_evening"] = (df["hour"] >= lo) & (df["hour"] < hi)
+    agg = (df.groupby(["h3_r8", "week"])
+          .agg(evening_share=("is_evening", "mean"), mean_severity=("severity", "mean"),
+               junction_share=("at_junction", "mean"))
+          .reset_index())
+    out = hw[["h3_r8", "week"]].merge(agg, on=["h3_r8", "week"], how="left")
+    return out[["evening_share", "mean_severity", "junction_share"]].fillna(0.0)
+
+
+def t2_features(hw: pd.DataFrame) -> pd.DataFrame:
+    df = hw.sort_values(["h3_r8", "week"]).reset_index(drop=True).copy()
+    g = df.groupby("h3_r8")["impact"]
+    df["impact_lag1"] = df["impact"]
+    df["impact_lag2"] = g.shift(1)
+    df["impact_lag3"] = g.shift(2)
+    df["impact_lag4"] = g.shift(3)
+    df["impact_roll4"] = g.transform(lambda s: s.rolling(4).mean())
+    df["neighbor_impact"] = _neighbor_lag1_impact(df)
+    df[["evening_share", "mean_severity", "junction_share"]] = _raw_hex_week_rates(df)
+    df["y_next"] = df.groupby("h3_r8")["y"].shift(-1)
+    return df.dropna(subset=FEATURES_T2 + ["y_next"]).reset_index(drop=True)
