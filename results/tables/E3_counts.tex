@@ -1,13 +1,13 @@
-\begin{tabular}{lrrrrrrrr}
+\begin{tabular}{lllrr}
 \toprule
-model & macro_mase & mase_lo & mase_hi & pooled_mase & rmse & poisson_deviance & n_seeds & flagged_stations \\
+Model & Macro MASE [95\% CI] & Pooled MASE & RMSE & Poisson dev. \\
 \midrule
-lasso & 0.703 & 0.649 & 0.769 & 0.715 & 30.815 & 16.715 & 1 & 0 \\
-ridge & 0.705 & 0.650 & 0.771 & 0.715 & 30.675 & 16.692 & 1 & 0 \\
-random_forest & 0.736 & 0.689 & 0.789 & 0.746 & 29.664 & 14.629 & 3 & 0 \\
-lightgbm & 0.740 & 0.693 & 0.794 & 0.758 & 30.796 & 15.042 & 3 & 0 \\
-poisson_glm & 0.750 & 0.703 & 0.804 & 0.753 & 29.697 & 14.712 & 1 & 0 \\
-ma7 & 0.756 & 0.700 & 0.817 & 0.775 & 31.939 & 16.423 & 1 & 0 \\
-seasonal_naive & 0.975 & 0.902 & 1.062 & 1.000 & 41.113 & 42.181 & 1 & 0 \\
+lasso & 0.697 [0.642, 0.762] & 0.715 & 30.8 & 16.7 \\
+ridge & 0.699 [0.643, 0.764] & 0.715 & 30.7 & 16.7 \\
+random\_forest & 0.730 [0.679, 0.783] & 0.746 & 29.7 & 14.6 \\
+lightgbm & 0.733 [0.683, 0.787] & 0.758 & 30.8 & 15.0 \\
+poisson\_glm & 0.744 [0.695, 0.800] & 0.753 & 29.7 & 14.7 \\
+ma7 & 0.750 [0.697, 0.814] & 0.775 & 31.9 & 16.4 \\
+seasonal\_naive & 0.967 [0.889, 1.057] & 1.000 & 41.1 & 42.2 \\
 \bottomrule
 \end{tabular}

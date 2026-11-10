@@ -1,7 +1,15 @@
 """Leak-free feature builders for T1 (station-day counts) and T2 (hex-week hotspots).
 
-Every feature uses only data from strictly before the row's own date/week (via shift);
-the target column (y for T1, y_next for T2) is the only forward-looking (shift(-1)) value.
+T1: one row per (station, day d). y is the count ON day d and every feature uses only days
+strictly before d, so this is a one-step-ahead forecast of day d from history through d-1. The
+calendar features (weekday, is_weekend, is_holiday) therefore describe the target day itself.
+
+T2: one row per (hexagon, week w). Features use weeks up to and including w, and y_next is the
+hotspot label of week w+1 (the only forward-looking, shift(-1), value).
+
+(Afzal, 10 Nov: T1 originally set y = n(d+1) while the features still stopped at d-1. That skipped
+day d, made lag7 point 8 days before the target, and attached the weekday/holiday of d to the count
+of d+1. y is now n(d); tests/research/test_alignment.py pins this.)
 """
 import h3
 import numpy as np
@@ -33,7 +41,7 @@ def t1_features(sd: pd.DataFrame) -> pd.DataFrame:
     df["samedow_mean"] = (df.groupby(["police_station", "weekday"])["n"]
                           .transform(lambda s: s.shift(1).expanding().mean()))
     df["station_code"] = df["police_station"].astype("category").cat.codes
-    df["y"] = g.shift(-1)
+    df["y"] = df["n"]   # target = the count on the row's own day; every feature above is from earlier days
     return df.dropna(subset=FEATURES_T1 + ["y"]).reset_index(drop=True)
 
 

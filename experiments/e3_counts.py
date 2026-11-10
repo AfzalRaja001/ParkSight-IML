@@ -5,7 +5,8 @@ Writes (all under results/):
   tables/E3_wilcoxon.csv             paired Wilcoxon p-values on per-station MASE
   tables/E3_ablation.csv             best model with one feature group removed at a time
   tables/E3_chosen_params.csv        which grid values the inner validation picked (edge-of-grid check)
-  predictions/E3_counts_predictions.parquet   every test prediction (E5 conformal and E10 read this)
+  predictions/E3_counts_predictions.parquet   every test prediction
+  predictions/t1_best.parquet        hand-off to E5 (conformal): best model, calibration + test blocks
   figures/E3_counts.pdf              macro MASE with intervals
 
 Run:  python experiments/e3_counts.py
@@ -17,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import matplotlib
+import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -27,16 +28,13 @@ from parksight.research import data as D  # noqa: E402
 from parksight.research import features as F  # noqa: E402
 from parksight.research import metrics as M  # noqa: E402
 from parksight.research import models as MD  # noqa: E402
-from parksight.research import paths  # noqa: E402
-
-NON_BASELINE = [m for m in MD.T1_MODELS if m not in MD.BASELINES]
+from parksight.research import paths, report_tables, style  # noqa: E402
 
 
 def ladder(feat):
     pred = MD.run_cv("t1", MD.T1_MODELS, feat=feat)
     summary = M.summarise_t1(pred)
     summary.to_csv(paths.TABLES / "E3_counts.csv", index=False)
-    (paths.TABLES / "E3_counts.tex").write_text(summary.to_latex(index=False, float_format="%.3f"))
     pred.to_parquet(paths.PREDICTIONS / "E3_counts_predictions.parquet", index=False)
     return pred, summary
 
@@ -45,7 +43,7 @@ def chosen_params(pred):
     """How often each model's inner validation picked the first or last grid value.
 
     A model that always sits on an edge needs a wider grid, so this is printed and saved."""
-    fits = (pred[~pred["model"].isin(MD.BASELINES)]
+    fits = (pred[~pred["model"].isin(MD.T1_BASELINES)]
             .groupby(["model", "fold", "seed"])["params"].first().reset_index())
     rows = []
     for model, g in fits.groupby("model"):
@@ -72,35 +70,36 @@ def significance(pred):
     return out
 
 
-def ablation(feat, summary):
-    best = summary[summary["model"].isin(NON_BASELINE)].iloc[0]["model"]
-    variants = {
-        "full": F.FEATURES_T1,
-        "no_lag_features": [f for f in F.FEATURES_T1 if f not in F.LAG_FEATURES],
-        "no_calendar_features": [f for f in F.FEATURES_T1 if f not in F.CAL_FEATURES],
-        "no_station_feature": [f for f in F.FEATURES_T1 if f != F.STATION],
-    }
+def best_model(summary):
+    return summary[~summary["model"].isin(MD.T1_BASELINES)].iloc[0]["model"]
+
+
+def ablation(feat, best):
+    full = F.FEATURES_T1
+    variants = {"full": full}
+    for name, cols in MD.FEATURE_GROUPS.items():
+        variants[f"no_{name}_features"] = [f for f in full if f not in cols]
     rows = []
     for name, feats in variants.items():
         print(f"[E3 ablation] {best} with {name}", flush=True)
         s = M.summarise_t1(MD.run_cv("t1", [best], features=feats, feat=feat, verbose=False)).iloc[0]
-        rows.append(dict(model=best, variant=name, macro_mase=s["macro_mase"], mase_lo=s["mase_lo"],
-                         mase_hi=s["mase_hi"], pooled_mase=s["pooled_mase"], rmse=s["rmse"]))
+        rows.append(dict(model=best, variant=name, mase_macro=s["mase_macro"], mase_lo=s["mase_lo"],
+                         mase_hi=s["mase_hi"], rmse=s["rmse"]))
     out = pd.DataFrame(rows)
-    out["delta_vs_full"] = out["macro_mase"] - out.loc[out["variant"] == "full", "macro_mase"].iloc[0]
+    out["delta_vs_full"] = out["mase_macro"] - out.loc[out["variant"] == "full", "mase_macro"].iloc[0]
     out.to_csv(paths.TABLES / "E3_ablation.csv", index=False)
     return out
 
 
 def figure(summary):
-    s = summary.sort_values("macro_mase", ascending=False)
-    fig, ax = plt.subplots(figsize=(5.2, 3.0))
-    err = [s["macro_mase"] - s["mase_lo"], s["mase_hi"] - s["macro_mase"]]
-    ax.barh(s["model"], s["macro_mase"], xerr=err, color="#4C78A8", capsize=3)
+    style.apply()
+    s = summary.sort_values("mase_macro", ascending=False)
+    fig, ax = plt.subplots(figsize=(4.6, 2.8))
+    err = [s["mase_macro"] - s["mase_lo"], s["mase_hi"] - s["mase_macro"]]
+    ax.barh(s["model"], s["mase_macro"], xerr=err, color=style.PALETTE[0], capsize=3)
     ax.axvline(1.0, color="#888888", lw=1, ls="--")
     ax.set_xlabel("macro MASE (lower is better; 1.0 = last-week forecast)")
-    fig.tight_layout()
-    fig.savefig(paths.FIGURES / "E3_counts.pdf")
+    style.savefig(fig, "E3_counts")
     plt.close(fig)
 
 
@@ -114,8 +113,13 @@ def main():
     print(summary.round(3).to_string(), flush=True)
     print(chosen_params(pred).to_string(), flush=True)
     print(significance(pred).round(4).to_string(), flush=True)
-    print(ablation(feat, summary).round(3).to_string(), flush=True)
+    best = best_model(summary)
+    print(ablation(feat, best).round(3).to_string(), flush=True)
     figure(summary)
+    report_tables.write_e3()
+    h = MD.conformal_handoff(best, feat=feat)
+    h.to_parquet(paths.PREDICTIONS / "t1_best.parquet", index=False)
+    print(f"[E3] hand-off for E5: {best}, {len(h):,} rows -> predictions/t1_best.parquet", flush=True)
     print(f"[E3] done in {time.time() - t0:.0f}s", flush=True)
 
 

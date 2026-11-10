@@ -1,5 +1,6 @@
 % Owner: see docs/iml-planning/TEAM_WORK_SPLIT_V2.md section 8
 \section{Methods}
+\input{sections/methods_models}
 \subsection{Metrics}
 Headline MASE is computed per station with that station's own training-window seasonal-naive MAE as denominator, then macro-averaged; pooled MASE (test-window denominator) is reported beside it and the two are not comparable. Intervals are 95\% bootstrap intervals over stations (seed 12345). Poisson deviance clips predictions at $10^{-6}$. Stations with a near-zero denominator are floored and flagged.
 \subsection{Conformal intervals}

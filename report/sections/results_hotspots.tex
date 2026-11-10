@@ -1,0 +1,21 @@
+% Owner: Afzal. Included from results.tex. Numbers: results/tables/E4_hotspots.csv, E4_chosen_params.csv.
+\subsection{Next-week hotspots (E4)}
+Hotspots are persistent: a hexagon in the top 10\% this week usually is next week, so the question is what a model adds. Two baselines are therefore always shown. \emph{Persistence} predicts the label of the previous week and scores PR-AUC 0.479 [0.404, 0.548]. \emph{Persistence by impact} ranks hexagons by last week's impact and is much stronger, 0.743 [0.664, 0.804] over all hexagons (Table~\ref{tab:hotspots}, Figure~\ref{fig:pr}). All four classifiers improve on it: SVM 0.811, logistic regression 0.807, random forest 0.805 and LightGBM 0.804, a gain of $+0.061$ to $+0.068$ PR-AUC whose bootstrap interval excludes zero for each model (lowest lower bound $+0.037$). The gain is real but modest, and the four models are indistinguishable from each other (all within 0.008, overlapping intervals); the linear models match the tree ensembles, as they did for counts.
+
+\begin{table}[t]
+\centering\small
+\caption{T2, next-week hotspot classification (top 10\% of hexagons by weekly impact), four time-blocked folds. Intervals are 95\% cluster-bootstrap intervals that resample whole hexagons. ``Emerging'' keeps only hexagons that were not hotspots in the origin week. $\Delta$ is the PR-AUC difference from persistence by impact. The Brier score is not shown for that baseline because its scores are ranks, not probabilities; its F1 on the emerging subset is 0 by construction, since the subset contains none of the hexagons it flags.}
+\label{tab:hotspots}
+\resizebox{\linewidth}{!}{\input{../results/tables/E4_hotspots}}
+\end{table}
+
+\paragraph{Emerging hotspots.} Only 3.8\% of the 5{,}455 test rows in this subset become hotspots (208 positives), so it is the harder and more useful case. Here persistence by impact reaches 0.248 [0.199, 0.298] and the classifiers 0.358 to 0.374 (logistic regression 0.374 [0.309, 0.450]), a gain of $+0.110$ to $+0.126$ whose intervals again exclude zero, about ten times the 0.038 expected by chance. Absolute precision is still low (F1 between 0.24 and 0.31), so the models rank new hotspots better than the baseline but do not find them reliably.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{E4_pr_curves}
+\caption{Precision-recall curves pooled over the four test blocks. The dashed line is persistence by impact and the dotted line the share of positives. All four classifiers lie above the baseline, and almost on top of each other.}
+\label{fig:pr}
+\end{figure}
+
+\paragraph{Calibration and caveats.} The classifiers' Brier scores (0.040 to 0.041) are lower than the 0.068 of persistence of the label. The intervals capture sampling variation over hexagons but not variation across weeks or folds (there are four folds and 208 emerging positives), so differences smaller than about 0.05 PR-AUC should not be treated as evidence.

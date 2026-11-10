@@ -1,2 +1,16 @@
-% Owner: see docs/iml-planning/TEAM_WORK_SPLIT_V2.md section 8
+% Owner: Afzal. See docs/iml-planning/TEAM_WORK_SPLIT_V2.md section 8
 \section{Introduction}
+Cars parked on main roads, near junctions and outside markets squeeze the carriageway and slow the traffic behind them, yet parking enforcement is mostly reactive: officers patrol the usual routes and issue tickets. The only large record of the problem is the tickets themselves, and a ticket records the presence of an officer as much as the presence of an offence.
+
+This matters because officers are not spread evenly over the day. In 298{,}445 anonymised parking tickets from the Bengaluru traffic police (10 November 2023 to 8 April 2024, 54 police stations), 1{,}773 distinct enforcement devices are active at 11:00 but only 12 at 19:00, and just 0.2\% of tickets fall between 17:00 and 21:00, the evening rush. A model trained on ticket counts therefore learns where officers went, not where cars parked illegally, and recommends sending them there again: a feedback loop that is intrinsic to models trained on officer-discovered events \citep{ensign2018runaway}.
+
+We study this with classical machine learning only (linear and Poisson models, regularised regression, random forests, boosting, SVM, PCA and K-Means) and ask three questions.
+\begin{enumerate}
+\item Is the evening gap real, and are the timestamps trustworthy?
+\item On a benchmark where the truth is known by construction, how much does censoring hurt, and how well does inverse-propensity weighting recover the truth as exposure becomes small?
+\item Which classical models forecast next-day ticket counts per station and next-week hotspots per hexagon best, against strong baselines, and are their uncertainty intervals honest?
+\end{enumerate}
+
+\paragraph{Contributions.} (i)~Evidence for the evening gap from device activity. (ii)~A semi-synthetic censoring benchmark with a known truth. (iii)~A time-blocked comparison of classical models on two tasks, always reported against the baselines ``same weekday last week'' and ``last week's hotspot'', with per-station (macro) metrics so that one very busy station does not decide the result. (iv)~Split-conformal intervals, global and per volume tier. We replicate the model comparison of \citet{gao2019parking} on a different city and extend it with an explicit treatment of censoring.
+
+\paragraph{Origin of the code.} ParkSight began as a hackathon project by one of the authors before this course; it supplied the data pipeline, the impact score (PCIS), a de-biasing engine and a LightGBM forecast. The two prediction tasks, the folds, the metrics, the model comparison, the benchmark and the conformal analysis reported here were written for this course, and the hackathon state is preserved in the repository under the tag \texttt{hackathon-baseline}.

@@ -1,0 +1,12 @@
+\begin{tabular}{lllrrrr}
+\toprule
+Model & PR-AUC, all [95\% CI] & PR-AUC, emerging [95\% CI] & $\Delta$ vs rank baseline, all & $\Delta$ vs rank baseline, emerging & F1, all & Brier, all \\
+\midrule
+svm & 0.811 [0.748, 0.856] & 0.370 [0.304, 0.446] & +0.068 & +0.122 & 0.712 & 0.040 \\
+logreg & 0.807 [0.743, 0.854] & 0.374 [0.309, 0.450] & +0.065 & +0.126 & 0.703 & 0.040 \\
+random\_forest & 0.805 [0.739, 0.853] & 0.358 [0.293, 0.432] & +0.062 & +0.111 & 0.710 & 0.041 \\
+lightgbm & 0.804 [0.737, 0.852] & 0.358 [0.293, 0.428] & +0.061 & +0.110 & 0.705 & 0.041 \\
+persistence\_impact & 0.743 [0.664, 0.804] & 0.248 [0.199, 0.298] & -- & -- & 0.664 & -- \\
+persistence & 0.479 [0.404, 0.548] & 0.038 [0.031, 0.045] & -0.263 & -0.209 & 0.667 & 0.068 \\
+\bottomrule
+\end{tabular}

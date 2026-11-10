@@ -1,0 +1,14 @@
+% Owner: Afzal. Included from results.tex. Numbers: results/tables/E3_counts.csv, E3_ablation.csv, E3_wilcoxon.csv.
+\subsection{Next-day ticket counts (E3)}
+Table~\ref{tab:counts} compares the models on the four test blocks. Every model beats the ``same weekday last week'' forecast (macro MASE 0.967, 95\% interval 0.889 to 1.057) by a wide margin (paired Wilcoxon $p<10^{-3}$ for every model). The best macro MASE belongs to the log-scale linear models: lasso 0.697 [0.642, 0.762] and ridge 0.699 [0.643, 0.764], ahead of the random forest (0.730), LightGBM (0.733), the Poisson GLM (0.744) and the 7-day moving average (0.750). Lasso and ridge are better than the random forest station by station (Wilcoxon $p=0.003$ and $0.002$), but LightGBM and the forest are indistinguishable ($p=0.72$), the Poisson GLM is somewhat behind the forest ($p=0.015$), and the moving average is borderline against it ($p=0.053$). The intervals of the top five models overlap, and the 12 tests are not corrected for multiple comparisons, so the ordering inside that group should not be over-read.
+
+\begin{table}[t]
+\centering\small
+\caption{T1, next-day ticket counts per station, four time-blocked folds. Macro MASE is per station and then averaged (1.0 is the same-weekday-last-week forecast; lower is better); the interval resamples stations. Pooled MASE uses the test-window denominator and is not comparable with the macro column or with the hackathon's 0.73.}
+\label{tab:counts}
+\input{../results/tables/E3_counts}
+\end{table}
+
+\paragraph{The metrics disagree on the winner.} The random forest has the lowest RMSE (29.7) and Poisson deviance (14.6), and the Poisson GLM also beats lasso on both, while lasso and ridge win on MASE. RMSE and deviance are dominated by the few very busy stations and reward predicting the mean; MASE counts every station equally and rewards a typical value, which is what a model fitted on $\log(1+y)$ produces. We have not tested this explanation, and the RMSE intervals (for example 22.9 to 38.7 for lasso) overlap heavily, so we report macro MASE as the headline and give the other metrics beside it rather than choosing the metric that favours one model.
+
+\paragraph{Ablation.} Removing the history features (lags, rolling means, same-weekday mean) from lasso raises macro MASE by $+0.048$ (0.746), whereas removing the calendar flags ($-0.003$) or the station ($+0.001$) changes nothing outside the noise. Most of the predictable signal is a station's recent level, which is why a 7-day moving average comes so close to the fitted models.
