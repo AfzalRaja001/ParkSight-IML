@@ -1,2 +1,22 @@
 % Owner: see docs/iml-planning/TEAM_WORK_SPLIT_V2.md section 8
 \section{Discussion}
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+Five months of data from one city cannot capture annual seasonality and does not support a claim
+of generalisation to other cities or periods. There is no independent ground-truth congestion
+signal for Bengaluru: PCIS and the weekly-impact hotspot label (Section~\ref{sec:data}) are
+declared proxies, not measurements, and any claim about recovering the true evening violation
+rate rests on the semi-synthetic benchmark of Section~\ref{sec:data}, not on real data, because
+the real evening rate is exactly what was never recorded. A station-day count of zero is
+ambiguous by construction: it can mean no violation occurred, or that no device was present to
+record one, and the two are indistinguishable outside the synthetic benchmark. The benchmark's
+own pseudo-truth window (02:00--11:59) is itself slightly censored in reality, so results from it
+describe recovery of a reference window, not an absolute truth. Timestamps required the
+trustworthiness check in Section~\ref{sec:data} before hour-level timing could be relied on; the
+result was reassuring, but it is a check that was performed, not a guarantee the raw system clock
+was accurate. Finally, our headline MASE is a per-station macro average using each station's own
+training-window denominator, while the original hackathon code reported a pooled MASE with a
+different, test-window denominator; the two numbers are not comparable and should not be read
+against each other.
