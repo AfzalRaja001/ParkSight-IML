@@ -6,7 +6,9 @@
   python experiments/run_all.py --tests    run pytest first and stop if it fails
 
 Experiments (script -> main table):  E1 e1_eda.py, E2 e2_benchmark.py, E3 e3_counts.py, E4 e4_hotspots.py,
-E5 e5_conformal.py, E6 e6_unsup.py. A script that is not in the repo yet is reported, not an error.
+E5 e5_conformal.py, E6 e6_unsup.py, E7 e7_training_curve.py, plus the method diagram (F0) and, last, the
+IEEE report tables (make_ieee_tables.py), which are rebuilt whenever any experiment ran. A script that is
+not in the repo yet is reported, not an error.
 E5 needs E3's hand-off file; E1 needs research_data/tickets_device.parquet (build it with
 scripts/build_tickets_device.py and the raw CSV).
 """
@@ -27,7 +29,12 @@ EXPERIMENTS = [   # (id, script, output that proves it ran, optional prerequisit
     ("e4", "e4_hotspots.py", "results/tables/E4_hotspots.csv", None),
     ("e5", "e5_conformal.py", "results/tables/E5_conformal.csv", "results/predictions/t1_best.parquet"),
     ("e6", "e6_unsup.py", "results/tables/E6_unsup.csv", None),
+    ("e7", "e7_training_curve.py", "results/tables/E7_training_curve.csv", None),
+    ("f0", "make_method_diagram.py", "results/figures/F0_method.pdf", None),
+    ("pcis", "pcis_volume_check.py", "results/tables/PCIS_volume_check.csv", None),
 ]
+TABLES_SCRIPT = "make_ieee_tables.py"      # reads the E2-E5 CSVs; always re-run after any experiment ran
+TABLES_OUT = "results/tables/ieee_counts.tex"
 
 
 def run(script, extra_env):
@@ -72,6 +79,14 @@ def main():
             break
         if eid == "e4":
             check_e4()
+    ran = any(msg.startswith(("ok", "FAILED")) for _, msg in summary)
+    if (ROOT / "experiments" / TABLES_SCRIPT).exists() and not any("FAILED" in m for _, m in summary):
+        if ran or args.force or not (ROOT / TABLES_OUT).exists():
+            t0 = time.time()
+            rc = run(TABLES_SCRIPT, {})
+            summary.append(("ieee tables", f"{'ok' if rc == 0 else 'FAILED'} in {time.time() - t0:.0f}s"))
+        else:
+            summary.append(("ieee tables", "skipped, nothing re-ran"))
     print("\n== run_all summary")
     for eid, msg in summary:
         print(f"  {eid.upper()}: {msg}")
