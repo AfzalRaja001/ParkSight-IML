@@ -16,7 +16,7 @@ def save(name, header, rows, cols):
 
 def main():
     c = pd.read_csv(T / "E3_counts.csv")
-    save("counts", "Model & Macro MASE [95\% CI] & RMSE & Dev.",
+    save("counts", r"Model & Macro MASE [95\% CI] & RMSE & Dev.",
          [(esc(r.model), f"{r.mase_macro:.3f} [{r.mase_lo:.3f}, {r.mase_hi:.3f}]", f"{r.rmse:.1f}", f"{r.deviance:.1f}")
           for r in c.itertuples()], "lccc")
 

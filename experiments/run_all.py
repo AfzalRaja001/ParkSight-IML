@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPERIMENTS = [   # (id, script, output that proves it ran, optional prerequisite file)
     ("e1", "e1_eda.py", "results/tables/E1_eda.csv", "research_data/tickets_device.parquet"),
     ("e2", "e2_benchmark.py", "results/tables/E2_benchmark.csv", None),
+    ("e2b", "e2b_exposure_mechanism.py", "results/tables/E2_exposure_mechanism_summary.csv",
+     "research_data/tickets_device.parquet"),
     ("e3", "e3_counts.py", "results/tables/E3_counts.csv", None),
     ("e4", "e4_hotspots.py", "results/tables/E4_hotspots.csv", None),
     ("e5", "e5_conformal.py", "results/tables/E5_conformal.csv", "results/predictions/t1_best.parquet"),
