@@ -1,0 +1,32 @@
+what,value,note,source
+tickets,298445,,dataset
+police stations,54,,dataset
+days of data,151,10 Nov 2023 to 8 Apr 2024,dataset
+enforcement devices,3070,,dataset
+active devices at 11:00,1773,peak,E1
+active devices at 19:00,12,evening rush,E1
+tickets in the 10:00 hour,32580,peak hour,E1
+tickets in the 19:00 hour,27,,E1
+share of tickets 17:00-21:00 (%),0.2,"596 of 298,445",E1
+share of tickets 00:00-06:00 (%),34,timestamp caveat,E1
+"naive count bias, real severity (%)",-77.8,,E2
+"weighted, cap 12 bias (%)",-41.8,hackathon cap,E2
+"weighted, cap 50 bias (%)",-14.5,,E2
+"weighted, no cap bias (%)",0.1,,E2
+"variance, no cap",17817,tickets^2 per cell,E2
+"variance, cap 12",1416,tickets^2 per cell,E2
+estimated-exposure bias (%),-70.9,"distinct devices, ticket thinning",E2
+"exposure overestimate at 09:00, original (x)",14.4,,E2b
+"exposure overestimate at 09:00, device-days + device-level censoring (x)",1.3,,E2b
+"macro MASE, last-week forecast",0.967,1.0 = this forecast,E3
+"macro MASE, lasso (best)",0.697,,E3
+"macro MASE, random forest",0.73,,E3
+"macro MASE, LightGBM",0.733,,E3
+"PR-AUC all, rank-by-last-week baseline",0.743,,E4
+"PR-AUC all, best classifier (SVM)",0.811,,E4
+"PR-AUC emerging, baseline",0.248,,E4
+"PR-AUC emerging, logistic regression",0.374,,E4
+"global interval coverage, busiest stations (%)",60.5,target 80,E5
+"per-tier interval coverage, busiest stations (%)",81.9,target 80,E5
+PCA PC1 variance (%),30.3,"when, not how much, stations record",E6
+full pipeline reproduction time (minutes),11,run_all.py --force,reproducibility check

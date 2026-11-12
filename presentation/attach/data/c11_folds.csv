@@ -1,0 +1,9 @@
+task,fold,train_start,train_end,test_start,test_end
+Counts (days),1,2023-12-08,2024-02-12,2024-02-13,2024-02-26
+Counts (days),2,2023-12-08,2024-02-26,2024-02-27,2024-03-11
+Counts (days),3,2023-12-08,2024-03-11,2024-03-12,2024-03-25
+Counts (days),4,2023-12-08,2024-03-25,2024-03-26,2024-04-08
+Hotspots (weeks),1,week 4,week 12,week 13,week 14
+Hotspots (weeks),2,week 4,week 14,week 15,week 16
+Hotspots (weeks),3,week 4,week 16,week 17,week 18
+Hotspots (weeks),4,week 4,week 18,week 19,week 20

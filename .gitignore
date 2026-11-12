@@ -26,3 +26,6 @@ Thumbs.db
 # device-level / ticket-level files stay out of git; result tables are committed
 research_data/
 !results/tables/*.csv
+
+# presentation upload pack (chart-ready data for Claude Design)
+!presentation/attach/data/*.csv
